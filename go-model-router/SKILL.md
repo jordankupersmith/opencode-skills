@@ -43,8 +43,28 @@ Run `bash ~/.config/opencode/skills/go-model-router/usage.sh` and read its `rout
 ## Tie-Break, Privacy, and Execution Dispatch Rules
 
 - **Credit tie-break:** When models are within ~5 benchmark points for a task, pick the higher monthly dollar pool, then higher 5-hour request count. Never let a tie-break push private work onto contributor models (`muse-spark-*`, `iceman-contributor-free`) or push interactive turns onto `mimo-v2.6-flash`/`mimo-v2.5` (3s TTFT).
-- **Subagent execution:** In Build mode, dispatch each task via `subagent(agent="exec-cheap" | "exec-mid" | "exec-premium", model="<Recommended model from table>")`. If a model returns a rate-limit / quota error, switch immediately to the row's **Per-Model Quota Fallback** column (or drop one tier `T3 → T2 → T1`) and retry once; never retry the exhausted model.
+- **Mandatory subagent dispatch:** In Build mode, if the active session model is not already the task's `Recommended model`, you MUST dispatch the task via `subagent(agent="exec-cheap" | "exec-mid" | "exec-premium", model="<Recommended model from table>")` rather than editing files directly in the parent session. Exception: the user explicitly says "run directly" or "do it in the main session". Always finish Build execution with a summary table: `Task ID | Planned Model | Actual Model Used | Result`.
+
+- **Fallback on rate-limit / quota error:** If a subagent returns HTTP 429 or a quota error, switch once to the row's Per-Model Quota Fallback column (or drop one tier `T3 → T2 → T1`) and retry. Never retry the exhausted model. Report the actual model used for every task.
 
 ## Quota-semantics note (empirical, 2026-10-31)
 
 One tiny `opencode run` on `glm-5.3-flash#low` ($60 pool) and one on `gpt-6-luna#low` ($15 pool) left the endpoint unchanged (5h 0.0%, weekly 40.0%, monthly 20.0% before and after). Percentages are coarse-grained and/or delayed — they do not move per single request and show no per-model split. Treat `usage.sh` thresholds as account-level signals and rely on the Per-Model Quota Fallback column + one-shot fallback/drop rule on HTTP 429 / quota errors.
+
+## How to Execute Routed Plans in Build Mode
+
+When the user switches from Plan to Build mode and asks to apply/implement a planned task, there are two execution paths:
+
+### Path A — Automatic Subagent Dispatch (recommended)
+The Build agent dispatches each task to a subagent with the exact routed model. No manual model switching needed.
+1. Press `Tab` to switch from `plan` to `build`.
+2. Type a prompt like `apply this change`, `implement task 1`, or `/implement <plan-path>`.
+3. The Build agent spawns `subagent(agent="exec-cheap" | "exec-mid" | "exec-premium", model="<Recommended model>")` for each task.
+
+### Path B — Manual TUI Model Switch (run directly in main session)
+The user manually changes the active session model and runs the task directly without a subagent.
+1. Press `Tab` to switch from `plan` to `build`.
+2. Press `Ctrl+X` then `m` (or type `/models`) to open the model picker.
+3. Select `<model-name>` (e.g., `claude-haiku-5-5`).
+4. Press `Ctrl+T` to cycle the variant to the recommended `#variant` (e.g., `#low`).
+5. Type `apply this change directly` — the task now runs on the selected model in the main session.
